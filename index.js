@@ -19,6 +19,7 @@ function StaticSiteGeneratorWebpackPlugin(options) {
   this.locals = options.locals;
   this.globals = options.globals;
   this.crawl = Boolean(options.crawl);
+  this.chunkNames = options.chunkNames ? options.chunkNames : ['manifest', 'vendor'];
 }
 
 StaticSiteGeneratorWebpackPlugin.prototype.apply = function(compiler) {
@@ -38,7 +39,7 @@ StaticSiteGeneratorWebpackPlugin.prototype.apply = function(compiler) {
           throw new Error('Source file not found: "' + self.entry + '"');
         }
 
-        var scope = loadChunkAssetsToScope(self.globals, compilation, webpackStatsJson);
+        var scope = loadChunkAssetsToScope(self.globals, compilation, webpackStatsJson, self.chunkNames);
 
         var assets = getAssetsFromCompilation(compilation, webpackStatsJson);
 
@@ -115,37 +116,33 @@ function renderPaths(crawl, userLocals, paths, render, assets, webpackStats, com
 }
 
 function merge (a, b) {
-  if (!a || !b) return a
-  var keys = Object.keys(b)
+  if (!a || !b) return a;
+  var keys = Object.keys(b);
   for (var k, i = 0, n = keys.length; i < n; i++) {
-    k = keys[i]
-    a[k] = b[k]
+    k = keys[i];
+    a[k] = b[k];
   }
-  return a
+  return a;
 }
 
 /*
  * Function to handle commonschunk plugin. Currently only supports a manifest file and single external
  * library file name vendor.
  */
-var loadChunkAssetsToScope = function(globals, compilation, webpackStatsJson) {
+var loadChunkAssetsToScope = function(globals, compilation, webpackStatsJson, orderedChunkNames) {
   var dom = new JSDOM('', { runScripts: 'outside-only' });
-  var chunkNames = Object.keys(webpackStatsJson.assetsByChunkName);
 
-  // CommonChunksPlugin will place webpackJsonP manifest loading in last bundle
-  if (chunkNames[chunkNames.length - 1] === 'manifest') {
-    chunkNames = ['manifest'].concat(chunkNames.slice(0, -1));
-  }
-
-  var chunkValues = chunkNames.map(function(chunk) {
+  var chunkValues = orderedChunkNames.map(function(chunk) {
     return findAsset(chunk, compilation, webpackStatsJson);
   });
 
   merge(dom.window, globals);
 
-  chunkValues.map(function(chunk) {
-    var script = new vm.Script(chunk.source());
-    dom.runVMScript(script);
+  chunkValues.forEach(function(chunk) {
+    if (chunk) {
+      var script = new vm.Script(chunk.source());
+      dom.runVMScript(script);
+    }
   });
 
   return dom.window;
